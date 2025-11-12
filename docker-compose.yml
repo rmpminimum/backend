@@ -3,6 +3,7 @@ services:
     image: postgres:15
     security_opt:
       - apparmor:unconfined
+    privileged: true
     environment:
       POSTGRES_DB: appdb
       POSTGRES_USER: app
