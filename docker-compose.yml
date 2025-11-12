@@ -16,6 +16,9 @@ services:
       retries: 20
     sysctls:
       net.ipv4.ip_unprivileged_port_start: "0"
+    security_opt:
+      - seccomp=unconfined
+
 
 
   app:
