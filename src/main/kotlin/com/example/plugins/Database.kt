@@ -7,6 +7,7 @@ import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
+import com.example.schema.PasswordResetTokens
 
 fun Application.configureDatabase() {
     val urlFromEnv = System.getenv("DB_URL")
@@ -31,6 +32,13 @@ fun Application.configureDatabase() {
     })
 
     Database.connect(ds)
+
+    transaction {
+        SchemaUtils.createMissingTablesAndColumns(
+            UserTable,
+            PasswordResetTokens
+        )
+    }
 
     transaction {
         SchemaUtils.createMissingTablesAndColumns(UserTable)

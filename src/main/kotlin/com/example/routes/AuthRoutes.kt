@@ -1,38 +1,78 @@
 package com.example.routes
-import com.auth0.jwt.JWT
-import com.example.plugins.JwtConfig
-import com.example.schema.Role
-import com.example.services.UserService
+
 import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
+import io.ktor.server.application.*   // даёт Route.application и call
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import java.util.*
+import com.example.schema.Role
+import com.example.plugins.JwtConfig
+import com.example.services.UserService
+import com.example.services.MailService
+import com.example.services.PasswordResetService
+import com.auth0.jwt.JWT
+import java.util.Date
+
 
 @Serializable data class RegisterRq(val email: String, val password: String, val role: Role)
 @Serializable data class LoginRq(val email: String, val password: String)
+@Serializable data class ForgotRq(val email: String)
+@Serializable data class ResetRq(val email: String, val token: String, val newPassword: String)
 
 fun Route.authRoutes() {
     val service = UserService()
+    val mail = MailService(this.application)
+    val reset = PasswordResetService(service, mail)
+
     route("/api/auth") {
+
+        // регистрация
         post("/register") {
             val rq = call.receive<RegisterRq>()
-            val dto = service.create(rq.email, rq.password, rq.role)
+            val dto = service.create(rq.email.trim(), rq.password, rq.role)
             call.respond(HttpStatusCode.Created, dto)
         }
+
+        // логин -> JWT
         post("/login") {
             val rq = call.receive<LoginRq>()
-            val dto = service.verifyAndGet(rq.email, rq.password)
-            if (dto == null) call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid credentials"))
-            else {
+            val dto = service.verifyAndGet(rq.email.trim(), rq.password)
+            if (dto == null) {
+                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid credentials"))
+            } else {
                 val token = JWT.create()
-                    .withIssuer(JwtConfig.issuer).withAudience(JwtConfig.audience)
-                    .withClaim("sub", dto.id).withClaim("email", dto.email).withClaim("role", dto.role.name)
-                    .withExpiresAt(Date(System.currentTimeMillis() + 1000L*60*60*12))
+                    .withIssuer(JwtConfig.issuer)
+                    .withAudience(JwtConfig.audience)
+                    .withClaim("sub", dto.id)
+                    .withClaim("email", dto.email)
+                    .withClaim("role", dto.role.name)
+                    .withExpiresAt(Date(System.currentTimeMillis() + 1000L * 60 * 60 * 12)) // 12 часов
                     .sign(JwtConfig.algorithm)
+
                 call.respond(mapOf("token" to token))
+            }
+        }
+
+        // восстановление пароля (шаг 1)
+        post("/forgot") {
+            val rq = call.receive<ForgotRq>()
+            val token = reset.requestReset(rq.email.trim())
+            if (token != null) {
+                mail.sendPasswordReset(rq.email.trim(), token)
+            }
+            // Всегда 200, чтобы не палить наличие/отсутствие пользователя
+            call.respond(HttpStatusCode.OK, mapOf("ok" to true))
+        }
+
+        // восстановление пароля (шаг 2)
+        post("/reset") {
+            val rq = call.receive<ResetRq>()
+            val ok = reset.resetPassword(rq.email.trim(), rq.token, rq.newPassword)
+            if (ok) {
+                call.respond(HttpStatusCode.OK, mapOf("status" to "password_updated"))
+            } else {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_or_expired_token"))
             }
         }
     }

@@ -10,6 +10,7 @@ val logback_version = "1.4.14"
 val exposed_version = "0.47.0"
 
 dependencies {
+    implementation("com.sun.mail:jakarta.mail:2.0.1")
     implementation("io.ktor:ktor-server-core-jvm:$ktor_version")
     implementation("io.ktor:ktor-server-netty-jvm:$ktor_version")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktor_version")
